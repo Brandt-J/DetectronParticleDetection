@@ -1,7 +1,5 @@
 torch==1.8
-torchvision==0.9
 numpy==1.21.0
 detectron2==0.4.1
 matplotlib==3.4.2
-pywin32  # install via conda install pywin32
-opencv
+pillow==8.3.1
