@@ -1,3 +1,5 @@
+import random
+
 import torch
 assert torch.__version__.startswith("1.8")
 gpuAvailable = torch.cuda.is_available()
@@ -21,14 +23,15 @@ from detectron2.engine import DefaultTrainer
 from functions import *
 
 if __name__ == '__main__':
-    trainImagePath = r'C:\Users\xbrjos\Desktop\particleAnnotations'
+    allImgsPath = r'C:\Users\xbrjos\Desktop\particleAnnotations\augmented'
     otherImgsPath = r"C:\Users\xbrjos\Desktop\particleAnnotations\others"  # Images NOT in test set
 
-    for subset in ["train", "test"]:
-        DatasetCatalog.register("particles_" + subset,
-                                lambda subset=subset: get_particle_dicts(os.path.join(trainImagePath, subset)))
-        MetadataCatalog.get("particles_" + subset).set(
-            thing_classes=['Particle', 'Fibre'])
+    trainGetter, testGetter = get_trainTest_getters(allImgsPath, 0.1)
+    for subset, getter in zip(["train", "test"], [trainGetter, testGetter]):
+        DatasetCatalog.register("particles_" + subset, getter)
+        MetadataCatalog.get("particles_" + subset).set(thing_classes=['Particle', 'Fibre'])
+
+    MetadataCatalog.get("particles_test").set(evaluator_type="sem_seg")
     particles_metadata = MetadataCatalog.get("particles_train")
 
     # Training
@@ -36,20 +39,22 @@ if __name__ == '__main__':
     cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
     cfg.DATASETS.TRAIN = ("particles_train",)
     cfg.DATASETS.TEST = ()
-    cfg.DATALOADER.NUM_WORKERS = 4
+    cfg.DATALOADER.NUM_WORKERS = 2
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
-    cfg.SOLVER.IMS_PER_BATCH = 2
+    cfg.SOLVER.IMS_PER_BATCH = 4
     cfg.SOLVER.BASE_LR = 0.00025
-    cfg.SOLVER.MAX_ITER = 1400
+    cfg.SOLVER.MAX_ITER = 50
+    cfg.SOLVER.CHECKPOINT_PERIOD = 5
+    cfg.TEST.EVAL_PERIOD = 0
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 2
     if not gpuAvailable:
         cfg.MODEL.DEVICE = 'cpu'
 
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
 
-    # trainer = DefaultTrainer(cfg)
-    # trainer.resume_or_load(resume=True)
-    # trainer.train()
+    trainer = DefaultTrainer(cfg)
+    trainer.resume_or_load(resume=True)
+    trainer.train()
 
     # Inference
     weihtsPath = os.path.join(cfg.OUTPUT_DIR, "model_final.pth")
@@ -61,9 +66,10 @@ if __name__ == '__main__':
         cfg.DATASETS.TEST = ("particles_test", )
         predictor = DefaultPredictor(cfg)
 
-        dataset_dicts = get_particle_dicts(os.path.join(trainImagePath, 'test'))
-        for i, d in enumerate(dataset_dicts):
-            print('inference on dataset', i)
+        outImgFolder = 'EvaluationImages'
+        os.makedirs(outImgFolder, exist_ok=True)
+        dataset_dicts = DatasetCatalog.data["particles_test"]()
+        for i, d in enumerate(random.sample(dataset_dicts, 5)):
             im = cv2.imread(d["file_name"])
             outputs = predictor(im)
             v = Visualizer(im[:, :, ::-1],
@@ -74,9 +80,9 @@ if __name__ == '__main__':
             v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
             plt.figure(figsize=(14, 10))
             plt.imshow(cv2.cvtColor(v.get_image()[:, :, ::-1], cv2.COLOR_BGR2RGB))
-            plt.savefig(os.path.join(f"test image {i+1}.png"))
+            plt.savefig(os.path.join(outImgFolder, f"test image {i+1}.png"))
 
-        for imgPath in os.listdir(otherImgsPath):
+        for imgPath in random.sample(os.listdir(otherImgsPath), 5):
             im = cv2.imread(os.path.join(otherImgsPath, imgPath))
             outputs = predictor(im)
             v = Visualizer(im[:, :, ::-1],
@@ -87,4 +93,4 @@ if __name__ == '__main__':
             v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
             plt.figure(figsize=(14, 10))
             plt.imshow(cv2.cvtColor(v.get_image()[:, :, ::-1], cv2.COLOR_BGR2RGB))
-            plt.savefig(os.path.join(f"test image {os.path.basename(imgPath).split('.')[0]}.png"))
+            plt.savefig(os.path.join(outImgFolder, f"test image {os.path.basename(imgPath).split('.')[0]}.png"))

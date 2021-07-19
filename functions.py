@@ -1,10 +1,20 @@
 import numpy as np
 import json
 import os
+from typing import Tuple, List, TYPE_CHECKING
 from detectron2.structures import BoxMode
 
 
-def get_particle_dicts(directory):
+def get_trainTest_getters(directory: str, fracTest: float = 0.1) -> Tuple['function', 'function']:
+    # numSamples = get_numDsets_in_dir(directory)
+    allDsets: List[dict] = get_particle_dicts(directory)
+    numSamples = len(allDsets)
+    numTest = round(numSamples * fracTest)
+    numTrain = numSamples - numTest
+    return lambda: get_list_slice(allDsets, 0, numTrain), lambda: get_list_slice(allDsets, numTrain, numSamples)
+
+
+def get_particle_dicts(directory) -> List[dict]:
     classes = ['Particle', 'Fibre']
     dataset_dicts = []
     for filename in [file for file in os.listdir(directory) if file.endswith('.json')]:
@@ -40,3 +50,11 @@ def get_particle_dicts(directory):
         record["annotations"] = objs
         dataset_dicts.append(record)
     return dataset_dicts
+
+
+def get_numDsets_in_dir(directory: str) -> int:
+    return len([file for file in os.listdir(directory) if file.endswith('.json')])
+
+
+def get_list_slice(listItem: list, startInd: int, endInd: int) -> list:
+    return listItem[startInd:endInd]
