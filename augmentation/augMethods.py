@@ -58,7 +58,6 @@ def resizeImage(image: ImageDefinition, size: Tuple[int, int]) -> ImageDefinitio
         annotation['points'] = resized_points
     newImg.imgObj = im_resized
     newImg.data = data
-    newImg.add_suffix("_resized")
     return newImg
 
 

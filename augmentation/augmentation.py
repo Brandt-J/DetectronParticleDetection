@@ -28,14 +28,13 @@ def augment_particles(input_directory: str, output_directory: str, size: Tuple[i
     images: List[ImageDefinition] = get_images_from_directory(input_directory)
     for i, img in enumerate(images):
         resized: ImageDefinition = resizeImage(img, size)
-        resized.saveImage(output_directory)
-
         lowRes: Image = create_lowRes_version(resized)
-        lowRes.saveImage(output_directory)
 
         for edited in [resized, lowRes]:
+            edited.saveImage(output_directory)
             for rotated in create_rotated_images(edited):
-                for patched in create_patch_images(rotated):
+                rotated.saveImage(output_directory)
+                for patched in create_patch_images(rotated, numVersions=1):
                     patched.saveImage(output_directory)
 
         print(f'completed {img.imgName}, {round((i+1)/len(images) * 100)} % done')
