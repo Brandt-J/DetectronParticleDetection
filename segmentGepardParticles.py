@@ -1,5 +1,5 @@
 import random
-
+import time
 import torch
 assert torch.__version__.startswith("1.8")
 gpuAvailable = torch.cuda.is_available()
@@ -37,24 +37,24 @@ if __name__ == '__main__':
     # Training
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
-    cfg.DATASETS.TRAIN = ("particles_train",)
-    cfg.DATASETS.TEST = ()
-    cfg.DATALOADER.NUM_WORKERS = 2
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
-    cfg.SOLVER.IMS_PER_BATCH = 4
-    cfg.SOLVER.BASE_LR = 0.00025
-    cfg.SOLVER.MAX_ITER = 50
-    cfg.SOLVER.CHECKPOINT_PERIOD = 5
-    cfg.TEST.EVAL_PERIOD = 0
+    # cfg.DATASETS.TRAIN = ("particles_train",)
+    # cfg.DATASETS.TEST = ()
+    # cfg.DATALOADER.NUM_WORKERS = 2
+    # cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+    # cfg.SOLVER.IMS_PER_BATCH = 4  # on my office notebook (CPU), iteration time is approx. 10 s x IMS_PER_BATCH
+    # cfg.SOLVER.BASE_LR = 0.00025
+    # cfg.SOLVER.MAX_ITER = 2000
+    # cfg.SOLVER.CHECKPOINT_PERIOD = 50
+    # cfg.TEST.EVAL_PERIOD = 0
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 2
     if not gpuAvailable:
         cfg.MODEL.DEVICE = 'cpu'
+    #
+    # os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
 
-    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-
-    trainer = DefaultTrainer(cfg)
-    trainer.resume_or_load(resume=True)
-    trainer.train()
+    # trainer = DefaultTrainer(cfg)
+    # trainer.resume_or_load(resume=True)
+    # trainer.train()
 
     # Inference
     weihtsPath = os.path.join(cfg.OUTPUT_DIR, "model_final.pth")
@@ -62,35 +62,61 @@ if __name__ == '__main__':
         print('cannot find weights at:', weihtsPath, ', not running model inference.')
     else:
         cfg.MODEL.WEIGHTS = weihtsPath
-        cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # was 0.5
-        cfg.DATASETS.TEST = ("particles_test", )
+        cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.3  # was 0.5
+        # cfg.DATASETS.TEST = ("particles_test", )
         predictor = DefaultPredictor(cfg)
 
         outImgFolder = 'EvaluationImages'
         os.makedirs(outImgFolder, exist_ok=True)
         dataset_dicts = DatasetCatalog.data["particles_test"]()
-        for i, d in enumerate(random.sample(dataset_dicts, 5)):
-            im = cv2.imread(d["file_name"])
-            outputs = predictor(im)
-            v = Visualizer(im[:, :, ::-1],
-                           metadata=particles_metadata,
-                           scale=1.0,
-                           instance_mode=ColorMode.IMAGE_BW   # remove the colors of unsegmented pixels
-            )
-            v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
-            plt.figure(figsize=(14, 10))
-            plt.imshow(cv2.cvtColor(v.get_image()[:, :, ::-1], cv2.COLOR_BGR2RGB))
-            plt.savefig(os.path.join(outImgFolder, f"test image {i+1}.png"))
+        random.seed(42)
+        # for i, d in enumerate(random.sample(dataset_dicts, 10)):
+        #     im = cv2.imread(d["file_name"])
+        #     t0 = time.time()
+        #     outputs = predictor(im)
+        #     print(f"inference took {round(time.time()-t0, 2)} seconds")
+        #     v = Visualizer(im[:, :, ::-1],
+        #                    metadata=particles_metadata,
+        #                    scale=1.0,
+        #                    instance_mode=ColorMode.IMAGE_BW   # remove the colors of unsegmented pixels
+        #     )
+        #     v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+        #     fig = plt.figure(figsize=(14, 10))
+        #     plt.imshow(cv2.cvtColor(v.get_image()[:, :, ::-1], cv2.COLOR_BGR2RGB))
+        #     plt.savefig(os.path.join(outImgFolder, f"test image {i+1}.png"))
+        #     plt.close(fig)
 
-        for imgPath in random.sample(os.listdir(otherImgsPath), 5):
+        for imgPath in os.listdir(otherImgsPath):
             im = cv2.imread(os.path.join(otherImgsPath, imgPath))
+            t0 = time.time()
             outputs = predictor(im)
+            print(f"inference took {round(time.time() - t0, 2)} seconds, found {len(outputs.get('instances'))} particles")
             v = Visualizer(im[:, :, ::-1],
                            metadata=particles_metadata,
                            scale=1.0,
                            instance_mode=ColorMode.IMAGE_BW   # remove the colors of unsegmented pixels
             )
             v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
-            plt.figure(figsize=(14, 10))
+            fig = plt.figure(figsize=(14, 10))
             plt.imshow(cv2.cvtColor(v.get_image()[:, :, ::-1], cv2.COLOR_BGR2RGB))
+            plt.title(f"Found {len(outputs.get('instances'))} particles")
             plt.savefig(os.path.join(outImgFolder, f"test image {os.path.basename(imgPath).split('.')[0]}.png"))
+
+            scaleFac: float = 5.0
+            im = cv2.resize(im, None, fx=1/scaleFac, fy=1/scaleFac)
+            im = cv2.resize(im, None, fx=scaleFac, fy=scaleFac)
+            outputs = predictor(im)
+            print(
+                f"inference took {round(time.time() - t0, 2)} seconds, found {len(outputs.get('instances'))} particles")
+            v = Visualizer(im[:, :, ::-1],
+                           metadata=particles_metadata,
+                           scale=1.0,
+                           instance_mode=ColorMode.IMAGE_BW  # remove the colors of unsegmented pixels
+                           )
+            v = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+            fig = plt.figure(figsize=(14, 10))
+            plt.imshow(cv2.cvtColor(v.get_image()[:, :, ::-1], cv2.COLOR_BGR2RGB))
+            plt.title(f"Resized image ({scaleFac} x) Found {len(outputs.get('instances'))} particles")
+            plt.savefig(os.path.join(outImgFolder, f"test image {os.path.basename(imgPath).split('.')[0]}, resize fac {scaleFac}.png"))
+
+            plt.close(fig)
