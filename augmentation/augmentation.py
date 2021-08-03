@@ -6,7 +6,29 @@ from io import BytesIO
 import base64
 from typing import Tuple, List
 
-from augMethods import ImageDefinition, resizeImage, create_rotated_images, create_patch_images, create_lowRes_version
+from augMethods import ImageDefinition, resizeImage, create_rotated_images, create_patch_images, create_lowRes_version, create_copy_paste_images
+
+
+def augment_particles(input_directory: str, output_directory: str, size: Tuple[int, int] = (1000, 1000)):
+    os.makedirs(output_directory, exist_ok=True)
+    images: List[ImageDefinition] = get_images_from_directory(input_directory)
+    copyPaste: List[ImageDefinition] = create_copy_paste_images(images[0], images[1], numVariations=5)
+    images[1].saveImage(output_directory)
+    for i, img in enumerate(copyPaste):
+        img.saveImage(output_directory)
+
+    # for i, img in enumerate(images):
+    #     resized: ImageDefinition = resizeImage(img, size)
+    #     lowRes: Image = create_lowRes_version(resized)
+    #
+    #     for edited in [resized, lowRes]:
+    #         edited.saveImage(output_directory)
+    #         for rotated in create_rotated_images(edited):
+    #             rotated.saveImage(output_directory)
+    #             for patched in create_patch_images(rotated, numVersions=1):
+    #                 patched.saveImage(output_directory)
+    #
+    #     print(f'completed {img.imgName}, {round((i+1)/len(images) * 100)} % done')
 
 
 def get_images_from_directory(directory: str) -> List[ImageDefinition]:
@@ -21,23 +43,6 @@ def get_images_from_directory(directory: str) -> List[ImageDefinition]:
         newImg: ImageDefinition = ImageDefinition(imgName, data, im)
         imgs.append(newImg)
     return imgs
-
-
-def augment_particles(input_directory: str, output_directory: str, size: Tuple[int, int] = (1000, 1000)):
-    os.makedirs(output_directory, exist_ok=True)
-    images: List[ImageDefinition] = get_images_from_directory(input_directory)
-    for i, img in enumerate(images):
-        resized: ImageDefinition = resizeImage(img, size)
-        lowRes: Image = create_lowRes_version(resized)
-
-        for edited in [resized, lowRes]:
-            edited.saveImage(output_directory)
-            for rotated in create_rotated_images(edited):
-                rotated.saveImage(output_directory)
-                for patched in create_patch_images(rotated, numVersions=1):
-                    patched.saveImage(output_directory)
-
-        print(f'completed {img.imgName}, {round((i+1)/len(images) * 100)} % done')
 
 
 if __name__ == '__main__':
