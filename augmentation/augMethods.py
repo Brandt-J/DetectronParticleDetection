@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 from io import BytesIO
 import base64
-from typing import Tuple, List
+from typing import Tuple, List, Union
 from dataclasses import dataclass
 import random
 import cv2
@@ -24,6 +24,7 @@ class ImageDefinition:
     imgName: str
     data: dict
     imgObj: Image.Image
+    _added_shapes: Union[None, List[dict]] = None
 
     def add_suffix(self, suffix: str) -> None:
         self.imgName += suffix
@@ -50,24 +51,29 @@ class ImageDefinition:
 
     def add_shape_dict(self, newShapeDict: dict) -> None:
         self.data["shapes"].append(newShapeDict)
+        if self._added_shapes is None:
+            self._added_shapes = [newShapeDict]
+        else:
+            self._added_shapes.append(newShapeDict)
 
     def cleanup_shapes(self) -> None:
         """
-        Cleans up the defined shapes, such that non of the shapes overlaps any other.
+        Cleans up the defined shapes, such that non of the shapes overlaps any newly added ones.
         :return:
         """
-        shapeList: List[dict] = self.get_shapes()
-        shapesToCheck: List[dict] = deepcopy(shapeList)
+        shapesToCheck: List[dict] = self.get_shapes()
+        # we only want to modify the "original" shapes
+        shapesToCheck = [shape for shape in shapesToCheck if shape not in self._added_shapes]
+
         imgShape: Tuple[int, int] = self.data['imageHeight'], self.data['imageWidth']
         cleanShapes: List[dict] = []
-        for shapeDict in shapeList:
+        othersMask: np.ndarray = get_mask_of_shapes(self._added_shapes, imgShape)
+        for shapeDict in shapesToCheck:
             shapeMask: np.ndarray = get_shape_mask(shapeDict["points"], imgShape)
-            shapesToCheck.remove(shapeDict)
-            othersMask: np.ndarray = get_mask_of_shapes(shapesToCheck, imgShape)
             shapeMask[othersMask > 0] = 0
             cleanShapes += get_shape_dicts_from_mask(shapeMask, shapeDict)
 
-        self.data["shapes"] = cleanShapes
+        self.data["shapes"] = cleanShapes + self._added_shapes
 
 
 def resizeImage(image: ImageDefinition, size: Tuple[int, int]) -> ImageDefinition:
@@ -263,11 +269,16 @@ def get_contour_bbox(cnt: np.ndarray) -> Bbox:
     """
     Computes the bounding box extrema of the given contour
     :param cnt: np.ndarray of contour
-    :return: y0, y1, x0, x1
+    :return: BoundingBox object
     """
     y0, y1 = cnt[:, 0, 1].min(), cnt[:, 0, 1].max()
     x0, x1 = cnt[:, 0, 0].min(), cnt[:, 0, 0].max()
-    return Bbox(x0, y0, x1-x0, y1-y0)
+
+    x0 = max([0, x0])
+    y0 = max([0, y0])
+    width = max([1, x1 - x0])
+    height = max([1, y1 - y0])
+    return Bbox(x0, y0, width, height)
 
 
 def get_shape_mask(shapePoints: List[List[int]], imgShape: Tuple[int, int]) -> np.ndarray:
