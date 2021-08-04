@@ -26,6 +26,8 @@ class ImageDefinition:
     imgObj: Image.Image
     _added_shapes: Union[None, List[dict]] = None
 
+    _saveImgCounter: int = 0
+
     def add_suffix(self, suffix: str) -> None:
         self.imgName += suffix
 
@@ -40,6 +42,15 @@ class ImageDefinition:
         new_jsonFileName = f'{self.imgName}.json'
         with open(os.path.join(directory, new_jsonFileName), 'w') as f:
             json.dump(self.data, f)
+        ImageDefinition.increment_save_counter()
+
+    @classmethod
+    def increment_save_counter(cls) -> None:
+        cls._saveImgCounter += 1
+
+    @classmethod
+    def get_save_counter(cls) -> int:
+        return cls._saveImgCounter
 
     def getDeepCopy(self) -> 'ImageDefinition':
         return ImageDefinition(deepcopy(self.imgName),

@@ -13,7 +13,7 @@ from augMethods import ImageDefinition, resizeImage, create_rotated_images, crea
 
 def augment_particles(input_directory: str, output_directory: str, size: Tuple[int, int] = (1000, 1000)):
     os.makedirs(output_directory, exist_ok=True)
-    images: List[ImageDefinition] = get_images_from_directory(input_directory)[:5]
+    images: List[ImageDefinition] = get_images_from_directory(input_directory)
     print(f'Starting with {len(images)} original images.')
     images = list(map(lambda x: resizeImage(x, size), images))
     imageCombinations: List[Tuple[ImageDefinition, ...]] = list(combinations(images, 2))
@@ -21,8 +21,9 @@ def augment_particles(input_directory: str, output_directory: str, size: Tuple[i
     for img1, img2 in random.sample(imageCombinations, int(round(len(imageCombinations)/3))):  # only take 1/3 of all possible combinations
         images += create_copy_paste_images(img1, img2, numVariations=2)
 
+    print(f"Having {len(images)} images after copy-paste augmentation.")
+
     for i, img in enumerate(images):
-        img.saveImage(output_directory)
         resized: ImageDefinition = resizeImage(img, size)
         lowRes: Image = create_lowRes_version(resized)
 
@@ -33,7 +34,8 @@ def augment_particles(input_directory: str, output_directory: str, size: Tuple[i
                 for patched in create_patch_images(rotated, numVersions=1):
                     patched.saveImage(output_directory)
 
-        print(f'completed {img.imgName}, {round((i+1)/len(images) * 100)} % done')
+        print(f'completed augmentation of {img.imgName}, {round((i+1)/len(images) * 100)} % done')
+    print(f"Saved in total {ImageDefinition.get_save_counter()} images.")
 
 
 def get_images_from_directory(directory: str) -> List[ImageDefinition]:
